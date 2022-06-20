@@ -5,12 +5,13 @@ from gym import spaces
 import numpy as np
 from gym_dogfight3d.envs.uav import UAV
 from gym_dogfight3d.envs.utils import *
-import math
+import math, transforms3d
+import matplotlib.pyplot as plt
+from matplotlib import cm
 import line_profiler
 
 class DogFightEnv(gym.Env):
     """A 3D Air combat environment for OpenAI gym"""
-    visualization = None
 
     def __init__(self):
         super(DogFightEnv, self).__init__()
@@ -22,6 +23,7 @@ class DogFightEnv(gym.Env):
         self.target_angle = 0
         self.continuous = True
         self.dt = 0.0625
+        self.ax = None
         self.info = {"attack": 0, "be_attacked": 0, "fallInWater": 0} # fallInWater,0:don't fall, 1:uav1 fall, 2: uav2 fall
         if self.continuous:
             # thrust, pitch, roll, yaw
@@ -56,7 +58,7 @@ class DogFightEnv(gym.Env):
 
     def _take_action(self, uav, action):
         throttle, elevator, aileron, rudder = action
-        uav.set_thrust_level(uav.thrust_level + throttle * 0.1)
+        uav.set_thrust_level(uav.thrust_level + throttle * 0.01)
         uav.set_pitch_level(elevator)
         uav.set_roll_level(aileron)
         uav.set_yaw_level(rudder)
@@ -73,8 +75,12 @@ class DogFightEnv(gym.Env):
             attack_reward = 0.05
         return attack_reward
 
-    def track(self):
-        return (30 - self.target_angle) * 0.00001
+    def get_dense_reward(self):
+        track_reward = (10 - self.target_angle) * 1e-5
+        distance_reward = (800 - self.target_distance) * 1e-6
+        height_reward = (self.uav1.position[1] - 500) * 1e-5 if self.uav1.position[1] < 500 else 0
+        return track_reward + distance_reward + height_reward
+
 
     def reset(self,
         *,
@@ -89,6 +95,9 @@ class DogFightEnv(gym.Env):
         init_postion1 = np.array([random.randint(-pos_range, pos_range),
                                   random.randint(3000, 4000),
                                   random.randint(-pos_range, pos_range)], dtype=np.float32)
+        init_postion1 = np.array([0,
+                                  3000,
+                                  0], dtype=np.float32)
         init_rotation1 = np.array([math.radians(random.randint(-180, 180)), 0, 0], dtype=np.float32)
         init_postion2 = np.array([random.randint(-pos_range, pos_range),
                                   random.randint(3000, 4000),
@@ -111,38 +120,158 @@ class DogFightEnv(gym.Env):
         self._take_action(self.uav2, opponent_action)
         self.uav1.update_kinetics(self.dt)
         self.uav2.update_kinetics(self.dt)
-        attack_reward = self.attack(self.uav1, self.uav2)
-        if attack_reward != 0: self.info["attack"] += 1
         be_attacked_reward = -self.attack(self.uav2, self.uav1)
         if be_attacked_reward != 0: self.info["be_attacked"] += 1
-        track_reward = self.track()
+        attack_reward = self.attack(self.uav1, self.uav2)
+        if attack_reward != 0: self.info["attack"] += 1
+        dense_reward = self.get_dense_reward()
         done = self.uav1.wreck or self.uav2.wreck
         if done:
             if self.uav1.fallInWater:
                 self.info["fallInWater"] = 1
                 fall_reward = -2
             if self.uav2.fallInWater: self.info["fallInWater"] = 2
-        reward = attack_reward + be_attacked_reward + track_reward + fall_reward
+        reward = attack_reward + be_attacked_reward + fall_reward + self.get_dense_reward()
         return self._next_obs(self.uav1, self.uav2), reward, done, self.info
 
-    def render(self):
-        pass
+    # inefficient renderer
+    # def _render(self):
+    #     if self.ax is None:
+    #         self.ax = plt.axes(projection='3d')
+    #         self.ax.set_title('dogfight3d')
+    #         # axes range
+    #         self.ax.set_xlim([-2000, 2000])
+    #         self.ax.set_xlabel('X')
+    #         self.ax.set_xticks(range(-2000, 2001, 1000))
+    #         self.ax.set_ylim([0, 5000])
+    #         self.ax.set_ylabel('Y')
+    #         self.ax.set_yticks(range(0, 5001, 1000))
+    #         self.ax.set_zlim([-2000, 2000])
+    #         self.ax.set_zlabel('Z')
+    #         self.ax.set_zticks(range(-2000, 2001, 1000))
+    #         self.uav1_pos = [[], [], []]
+    #         self.uav2_pos = [[], [], []]
+    #         plt.ion()
+    #     self.uav1_pos[0].append(self.uav1.position[0])
+    #     self.uav1_pos[1].append(self.uav1.position[1])
+    #     self.uav1_pos[2].append(self.uav1.position[2])
+    #     self.uav2_pos[0].append(self.uav2.position[0])
+    #     self.uav2_pos[1].append(self.uav2.position[1])
+    #     self.uav2_pos[2].append(self.uav2.position[2])
+    #     self.tmp1, = plt.plot(self.uav1_pos[0], self.uav1_pos[1], self.uav1_pos[2], 'red')
+    #     self.tmp2, = plt.plot(self.uav2_pos[0], self.uav2_pos[1], self.uav2_pos[2], 'blue')
+    #
+    #     font = {'family': 'serif',
+    #             'color': 'darkred',
+    #             'weight': 'normal',
+    #             'size': 16,
+    #             }
+    #     plt.legend(labels=[f"{self.uav1.health_level:.3f}",f"{self.uav2.health_level:.3f}"],loc="upper left", bbox_to_anchor=(-0.1, 0, 0, 1.1))
+    #     plt.pause(0.00001)
+
+    def _render(self):
+        if self.ax is None:
+            self.ax = plt.axes(projection='3d')
+            self.ax.set_title('dogfight3d')
+            # axes range
+            self.ax.set_xlim([-3000, 3000])
+            self.ax.set_ylim([-3000, 3000])
+            self.ax.set_zlim([0, 5000])
+
+            self.ax.set_xlabel('X')
+            self.ax.set_ylabel('Y')
+            self.ax.set_zlabel('Z')
+
+            self.ax.set_xticks(range(-3000, 3001, 1000))
+            self.ax.set_zticks(range(0, 5001, 1000))
+            self.ax.set_yticks(range(-3000, 3001, 1000))
+            self.uav1_pos = [[], [], []]
+            self.uav2_pos = [[], [], []]
+            self.line1, = plt.plot([0,0,0], [0,0,0], 'r')
+            self.line2, = plt.plot([0,0,0], [0,0,0], 'b')
+            plt.ion()
+        self.uav1_pos[0].append(self.uav1.position[0])
+        self.uav1_pos[1].append(self.uav1.position[1])
+        self.uav1_pos[2].append(self.uav1.position[2])
+        self.uav2_pos[0].append(self.uav2.position[0])
+        self.uav2_pos[1].append(self.uav2.position[1])
+        self.uav2_pos[2].append(self.uav2.position[2])
+        font = {'family': 'serif',
+                'color': 'darkred',
+                'weight': 'normal',
+                'size': 16,
+                }
+        plt.legend(labels=[f"{self.uav1.health_level:.3f}", f"{self.uav2.health_level:.3f}"], loc="upper left",
+                   bbox_to_anchor=(-0.1, 0, 0, 1.1))
+        # trajectory
+        self.line1.set_xdata(self.uav1_pos[0])
+        self.line1.set_ydata(self.uav1_pos[2])
+        self.line1.set_3d_properties(self.uav1_pos[1])
+        self.line2.set_xdata(self.uav2_pos[0])
+        self.line2.set_ydata(self.uav2_pos[2])
+        self.line2.set_3d_properties(self.uav2_pos[1])
+
+        # attack range
+        p = np.linspace(0, 2 * np.pi, 20)
+        r = np.linspace(0, 139, 20)
+        R, P = np.meshgrid(r, p)
+        x = R * np.cos(P)
+        y = R * np.sin(P)
+        z = np.sqrt(x ** 2 + y ** 2) / math.radians(10)
+        x, y, z = x.flatten(), y.flatten(), z.flatten()
+        # rotation
+        # mat1 = transforms3d.euler.euler2mat(self.uav1.rotation[0], self.uav1.rotation[1], self.uav1.rotation[2], 'ryxz')
+        mat1 = transforms3d.euler.euler2mat(self.uav1.rotation[0], self.uav1.rotation[1],  self.uav1.rotation[2], 'ryxz')
+        # print(self.uav1.rotation[0], self.uav1.rotation[1], self.uav1.pitch_attitude)
+        x1, z1, y1 = np.dot(mat1, np.stack([x, y, z], 0)) + self.uav1.position.reshape(3, 1)
+        x1, y1, z1 = x1.reshape((20, -1)), y1.reshape((20, -1)), z1.reshape((20, -1))
+        cone1 = self.ax.plot_surface(x1, y1, z1, color="crimson")
+        mat2 = transforms3d.euler.euler2mat(self.uav2.rotation[0], self.uav2.rotation[1], self.uav2.rotation[2], 'ryxz')
+        x2, z2, y2 = np.dot(mat2, np.stack([x, y, z], 0)) + self.uav2.position.reshape(3, 1)
+        x2, y2, z2 = x2.reshape((20, -1)), y2.reshape((20, -1)), z2.reshape((20, -1))
+        cone2 = self.ax.plot_surface(x2, y2, z2, color="royalblue")
+
+        self.ax.set_xlim([-3000, 3000])
+        self.ax.set_zlim([0, 5000])
+        self.ax.set_ylim([-3000, 3000])
+        plt.pause(0.00001)
+        cone1.remove()
+        cone2.remove()
+
+    def render(self, mode='live'):
+        assert mode in ["live", "replay"], "Invalid mode, must be either \"live\" or \"replay\""
+        if mode == 'replay':
+            pass
+        elif mode == 'live':
+            self._render()
 
     def close(self):
-        pass
+        plt.close()
 
 
-def main():
+def test():
     env = DogFightEnv()
     init = env.reset()
     start = time.time()
+    print(start)
+    steps = 0
+    # actions = []
+    # with open('action.txt', 'r') as f:
+    #     for line in f:
+    #         actions.append(list(map(float, line.strip().split())))
     while True:
+        env.render('live')
         action = env.action_space.sample()
+        # action = actions[steps]
+        # print(action)
+        steps += 1
         next_obs, r, done, info = env.step(action)
+        # print(env.current_step)
         if done:
             print(info, env.current_step)
             break
+    plt.close()
     print(time.time() - start)
 
 if __name__ == '__main__':
-    main()
+    test()

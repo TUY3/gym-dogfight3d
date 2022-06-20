@@ -58,7 +58,7 @@ class UAV:
         self.direction = np.array([0, 0, 0], dtype=np.float32)
 
         # attack
-        self.attack_range = [100, 800]
+        self.attack_range = [10, 800]
         self.attack_angle = 10
 
     def reset(self, thrust_level, linear_speed, position=None, rotation=None):
@@ -269,17 +269,17 @@ if __name__ == '__main__':
         'rzxy': (1, 1, 0, 1), 'ryxy': (1, 1, 1, 1), 'ryxz': (2, 0, 0, 1),
         'rzxz': (2, 0, 1, 1), 'rxyz': (2, 1, 0, 1), 'rzyz': (2, 1, 1, 1)
     }
-    ret = trans.euler.euler2mat(-6, -0.3, -2, 'ryxz')
+    ret = trans.euler.euler2mat(3, -0.2, 0.5, 'ryxz')
     print(ret[:,0],
           ret[:,1],
           ret[:,2], sep='\n')
-    # for axe in axes:
-    #     ret2 = trans.euler.euler2mat(3, -0.2, 0.5, axe)
-    #     if abs(ret2[0, 0] - ret[0, 0]) < 0.0001:
-    #         print(axe)
-    #         print(ret[:,0],
-    #               ret[:,1],
-    #               ret[:,2], sep='\n')
+    for axe in axes:
+        ret2 = trans.euler.euler2mat(3, -0.2, 0.5, axe)
+        if abs(ret2[0, 0] - ret[0, 0]) < 0.0001:
+            print(axe)
+            print(ret[:,0],
+                  ret[:,1],
+                  ret[:,2], sep='\n')
     # thrust_level = 0.7
     # linear_speed = 800 / 3.6
     # postion = np.array([0., 3000., 0.])
