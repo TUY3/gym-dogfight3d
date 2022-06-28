@@ -13,7 +13,7 @@ import line_profiler
 class DogFightEnv(gym.Env):
     """A 3D Air combat environment for OpenAI gym"""
 
-    def __init__(self):
+    def __init__(self, op_policy='self-play'):
         super(DogFightEnv, self).__init__()
         self.current_step = 0
         self.uav1 = UAV()
@@ -24,14 +24,15 @@ class DogFightEnv(gym.Env):
         self.continuous = True
         self.dt = 0.0625
         self.ax = None
+        self.op_policy = op_policy
         self.info = {"attack": 0, "be_attacked": 0, "fallInWater": 0} # fallInWater,0:don't fall, 1:uav1 fall, 2: uav2 fall
         if self.continuous:
             # thrust, pitch, roll, yaw
             # throttle(油门), elevator(升降), aileron(副翼), rudder(方向舵)
-            self.action_space = spaces.Box(-1.0, 1.0, np.array([4,]), dtype=np.float32)
+            self.action_space = spaces.Box(-1.0, 1.0, np.array([4, ]), dtype=np.float32)
         else:
             self.action_space = spaces.Discrete(9)
-        self.observation_space = spaces.Box(-1.0, 1.0, np.array([17,]), dtype=np.float64)
+        self.observation_space = spaces.Box(-11.0, 11.0, np.array([20, ]), dtype=np.float64)
 
     def _next_obs(self, uav1, uav2):
         obs = np.zeros(self.observation_space.shape[0])
@@ -54,6 +55,10 @@ class DogFightEnv(gym.Env):
         obs[14] = uav2.cap / 360
         obs[15] = uav2.pitch_attitude / 90
         obs[16] = uav2.roll_attitude / 90
+        # relative
+        obs[17] = (uav1.position[0] - uav2.position[0]) / 500
+        obs[18] = (uav1.position[2] - uav2.position[2]) / 500
+        obs[19] = (uav1.position[1] - uav2.position[1]) / 500
         return obs
 
     def _take_action(self, uav, action):
@@ -75,9 +80,9 @@ class DogFightEnv(gym.Env):
             attack_reward = 0.05
         return attack_reward
 
-    def get_dense_reward(self):
-        track_reward = (10 - self.target_angle) * 1e-5
-        distance_reward = (800 - self.target_distance) * 1e-6
+    def get_shaped_reward(self):
+        track_reward = (10 - self.target_angle) * 1e-6
+        distance_reward = (800 - self.target_distance) * 1e-7
         height_reward = (self.uav1.position[1] - 500) * 1e-5 if self.uav1.position[1] < 500 else 0
         return track_reward + distance_reward + height_reward
 
@@ -89,15 +94,13 @@ class DogFightEnv(gym.Env):
         options: Optional[dict] = None,
     ):
         super().reset(seed=seed)
+        self.ax = None
         init_thrust_level = 0.7
         init_linear_speed = 800 / 3.6
         pos_range = 1500
         init_postion1 = np.array([random.randint(-pos_range, pos_range),
                                   random.randint(3000, 4000),
                                   random.randint(-pos_range, pos_range)], dtype=np.float32)
-        init_postion1 = np.array([0,
-                                  3000,
-                                  0], dtype=np.float32)
         init_rotation1 = np.array([math.radians(random.randint(-180, 180)), 0, 0], dtype=np.float32)
         init_postion2 = np.array([random.randint(-pos_range, pos_range),
                                   random.randint(3000, 4000),
@@ -107,31 +110,41 @@ class DogFightEnv(gym.Env):
         self.uav2.reset(init_thrust_level, init_linear_speed, init_postion2, init_rotation2)
         self.current_step = 0
         self.info = {"attack": 0, "be_attacked": 0}
-        if not return_info:
-            return self._next_obs(self.uav1, self.uav2)
+        if self.op_policy == 'self-play':
+            if not return_info:
+                return [self._next_obs(self.uav1, self.uav2), self._next_obs(self.uav2, self.uav1)]
+            else:
+                return [self._next_obs(self.uav1, self.uav2), self._next_obs(self.uav2, self.uav1)], {}
         else:
-            return self._next_obs(self.uav1, self.uav2), {}
+            if not return_info:
+                return self._next_obs(self.uav1, self.uav2)
+            else:
+                return self._next_obs(self.uav1, self.uav2), {}
 
     def step(self, action):
         self.current_step += 1
         fall_reward = 0
-        self._take_action(self.uav1, action)
-        opponent_action = self.action_space.sample()
-        self._take_action(self.uav2, opponent_action)
+        if self.op_policy == 'self-play':
+            uav1_action, uav2_action = action
+        else:
+            uav1_action, uav2_action = action, self.action_space.sample()
+        self._take_action(self.uav1, uav1_action)
+        self._take_action(self.uav2, uav2_action)
         self.uav1.update_kinetics(self.dt)
         self.uav2.update_kinetics(self.dt)
         be_attacked_reward = -self.attack(self.uav2, self.uav1)
         if be_attacked_reward != 0: self.info["be_attacked"] += 1
         attack_reward = self.attack(self.uav1, self.uav2)
         if attack_reward != 0: self.info["attack"] += 1
-        dense_reward = self.get_dense_reward()
         done = self.uav1.wreck or self.uav2.wreck
         if done:
             if self.uav1.fallInWater:
                 self.info["fallInWater"] = 1
                 fall_reward = -2
             if self.uav2.fallInWater: self.info["fallInWater"] = 2
-        reward = attack_reward + be_attacked_reward + fall_reward + self.get_dense_reward()
+        reward = attack_reward + be_attacked_reward + fall_reward + self.get_shaped_reward()
+        if self.op_policy == 'self-play':
+            return [self._next_obs(self.uav1, self.uav2), self._next_obs(self.uav2, self.uav1)], reward, done, self.info
         return self._next_obs(self.uav1, self.uav2), reward, done, self.info
 
     # inefficient renderer
@@ -246,7 +259,7 @@ class DogFightEnv(gym.Env):
             self._render()
 
     def close(self):
-        plt.close()
+        pass
 
 
 def test():

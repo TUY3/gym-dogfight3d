@@ -1,1 +1,1 @@
-from .ma_env import DogFightEnv
+from .env import DogFightEnv
