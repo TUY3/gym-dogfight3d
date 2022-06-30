@@ -3,12 +3,11 @@
 DogFight3d is a reinforcement learning environment for training fixed-wing aircraft 1v1 air combat, it has approximate 
 real dynamics.
 
------------------------
 ## Dependencies
 * gym, numpy, transform3d
 * python3.8
 * linux or win
------------------
+
 ## Installation
 gym-dogfight3d is pip installable using its GitHub:
 
@@ -21,7 +20,6 @@ git clone https://github.com/TUY3/gym-dogfight3d
 cd gym-dogfight3d
 pip install -e .
 ```
------------------
 
 ## Environment
 ### observation space
@@ -39,7 +37,6 @@ pip install -e .
 ### action space
 continuous action space, including throttle,elevator,aileron,rudder
 
------------------
 ## Example
 ```
 env = gym.make('Dogfight3d-v0')
@@ -54,12 +51,6 @@ while True:
         break
 ```
 
------------------
-
 ### Reference
 * harfang3d/dogfight-sandbox-hg1
 
------------------
-
-### TODO:
-* render

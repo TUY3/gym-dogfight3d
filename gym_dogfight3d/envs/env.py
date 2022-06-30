@@ -26,13 +26,14 @@ class DogFightEnv(gym.Env):
         self.ax = None
         self.op_policy = op_policy
         self.info = {"attack": 0, "be_attacked": 0, "fallInWater": 0} # fallInWater,0:don't fall, 1:uav1 fall, 2: uav2 fall
+        self.uav_replay = []
         if self.continuous:
             # thrust, pitch, roll, yaw
             # throttle(油门), elevator(升降), aileron(副翼), rudder(方向舵)
             self.action_space = spaces.Box(-1.0, 1.0, np.array([4, ]), dtype=np.float32)
         else:
             self.action_space = spaces.Discrete(9)
-        self.observation_space = spaces.Box(-11.0, 11.0, np.array([20, ]), dtype=np.float64)
+        self.observation_space = spaces.Box(-1.0, 1.0, np.array([20, ]), dtype=np.float64)
 
     def _next_obs(self, uav1, uav2):
         obs = np.zeros(self.observation_space.shape[0])
@@ -95,6 +96,7 @@ class DogFightEnv(gym.Env):
     ):
         super().reset(seed=seed)
         self.ax = None
+        self.uav_replay = []
         init_thrust_level = 0.7
         init_linear_speed = 800 / 3.6
         pos_range = 1500
@@ -254,7 +256,10 @@ class DogFightEnv(gym.Env):
     def render(self, mode='live'):
         assert mode in ["live", "replay"], "Invalid mode, must be either \"live\" or \"replay\""
         if mode == 'replay':
-            pass
+            self.uav_replay.append({"uav1_pos": self.uav1.position,
+                                    "uav2_pos": self.uav2.position,
+                                    "uav1_rot": self.uav1.rotation,
+                                    "uav2_rot": self.uav2.rotation})
         elif mode == 'live':
             self._render()
 
@@ -264,21 +269,22 @@ class DogFightEnv(gym.Env):
 
 def test():
     env = DogFightEnv()
-    init = env.reset()
+    obs, obs_op = env.reset()
     start = time.time()
-    print(start)
     steps = 0
     # actions = []
     # with open('action.txt', 'r') as f:
     #     for line in f:
     #         actions.append(list(map(float, line.strip().split())))
     while True:
-        env.render('live')
+        # env.render('live')
         action = env.action_space.sample()
+        action = [action, action]
         # action = actions[steps]
         # print(action)
         steps += 1
         next_obs, r, done, info = env.step(action)
+        print(r)
         # print(env.current_step)
         if done:
             print(info, env.current_step)
