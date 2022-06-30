@@ -1,7 +1,0 @@
-README.md
-setup.py
-gym_dogfight3d.egg-info/PKG-INFO
-gym_dogfight3d.egg-info/SOURCES.txt
-gym_dogfight3d.egg-info/dependency_links.txt
-gym_dogfight3d.egg-info/requires.txt
-gym_dogfight3d.egg-info/top_level.txt

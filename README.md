@@ -1,4 +1,4 @@
-#DogFight3d: a 3d air combat reinforcement learning environment
+# DogFight3d: a 3d air combat reinforcement learning environment
 
 DogFight3d is a reinforcement learning environment for training fixed-wing aircraft 1v1 air combat, it has approximate 
 real dynamics.
