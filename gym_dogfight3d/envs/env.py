@@ -8,7 +8,6 @@ from gym_dogfight3d.envs.utils import *
 import math, transforms3d
 import matplotlib.pyplot as plt
 from matplotlib import cm
-import line_profiler
 
 class DogFightEnv(gym.Env):
     """A 3D Air combat environment for OpenAI gym"""
