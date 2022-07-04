@@ -60,6 +60,8 @@ class UAV:
         # attack
         self.attack_range = [10, 800]
         self.attack_angle = 10
+        self.target_distance = 0
+        self.target_angle = 0
 
     def reset(self, thrust_level, linear_speed, position=None, rotation=None):
         if position is not None:
@@ -252,9 +254,9 @@ class UAV:
         self.get_attitude(self.rotation)
 
         # fall into water:
-        if self.position[1] < 4:
-            self.fallInWater = True
-            self.hit(1)
+        # if self.position[1] < 4:
+        #     self.fallInWater = True
+        #     self.hit(1)
 
 
 if __name__ == '__main__':
