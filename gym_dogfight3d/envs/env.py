@@ -80,9 +80,9 @@ class DogFightEnv(gym.Env):
             attack_reward = 0.05
         return attack_reward
 
-    def get_shaped_reward(self):
-        track_reward = (10 - self.uav1.target_angle) * 1e-6
-        distance_reward = (800 - self.uav1.target_distance) * 1e-7
+    def get_shaped_reward(self, uav):
+        track_reward = (10 - uav.target_angle) * 1e-6
+        distance_reward = (800 - uav.target_distance) * 1e-7
         # height_reward = (self.uav1.position[1] - 500) * 1e-5 if self.uav1.position[1] < 500 else 0
         return track_reward + distance_reward
 
@@ -143,11 +143,12 @@ class DogFightEnv(gym.Env):
             #     self.info["fallInWater"] = 1
             #     fall_reward = -2
             # if self.uav2.fallInWater: self.info["fallInWater"] = 2
-        reward = attack_reward + be_attacked_reward + self.get_shaped_reward()
+        reward1 = attack_reward + be_attacked_reward + self.get_shaped_reward(self.uav1)
+        reward2 = -attack_reward - be_attacked_reward + self.get_shaped_reward(self.uav2)
         # if self.uav1.fallInWater: self.info["fallInWater"] = 1
         # if self.uav2.fallInWater: self.info["fallInWater"] = 2
         if self.opponent == 'self-play':
-            return [self._next_obs(self.uav1, self.uav2), self._next_obs(self.uav2, self.uav1)], reward, done, self.info
+            return [self._next_obs(self.uav1, self.uav2), self._next_obs(self.uav2, self.uav1)], [reward1, reward2], done, self.info
         return self._next_obs(self.uav1, self.uav2), reward, done, self.info
 
     # inefficient renderer
